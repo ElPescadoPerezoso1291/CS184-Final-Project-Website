@@ -109,6 +109,17 @@
         <h3 align = "middle">Diffusion</h3>
         <p>
         The intuition behind Diffusion is relatively simple. For a diffusion rate $d > 0$, density will spread across all neighbors of a grid cell. 
+        <div align="middle">
+          <table style="width:100%">
+            <tr align="center">
+              <td>
+                <img src="images/diffuse.png" align="middle" width="450vw" />
+                <figcaption>Diffusion visualization. Cells trade density across timesteps</figcaption>
+              </td>
+              <td>
+            </tr>
+          </table>
+        </div>
         For the flow out of a grid cell, we assume equal output toward all neighbors. The total output for grid cell $x_{i,j,k}$ will thus be $(1 - d)\rho_{i, j,k}$,
         and the output toward each neighboring cell will thus be $\frac{d}{6}\rho_{i, j,k}$ (6 neighboring cells for each cell). We can thus describe our diffusion relationship
         across time to be:
@@ -145,21 +156,65 @@
       The velocity solver consists of the addition of forces (from a mouse), viscous diffusion, and self-advection. Self-advection can be interpretted as the diffusion and advection of the velocity field itself. However, the evolution
       of the velocity field must conserve mass, as illustrated by the first equation of Navier-Stokes so the solver doesn't explode. To do this, we use the Hodge decomposition, which states that any velocity field is the sum of a mass 
       conserving field and a gradient field. With this mass-conserving field, we can project the velocity field to be the mass-conserving field. However, to do this, we must solve for the gradient field. Once we solve for the gradient field,
-      we can subtract it from our original velocity field to get our wanted mass-conserved field
+      we can subtract it from our original velocity field to get our wanted mass-conserved field. To solve for the gradient field, we must solve a linear system called the Poisson equation. Similar to our diffusion code though, we can apply the 
+      Gauss-Seidel relaxation for linear systems. 
+    </p>
+    <h3 align = "middle">Putting it All Together</h3>
+    To recall, we've discussed diffusion, which spreads the smoke thinly overtime; advection, which allows smoke to follow a set vector field; and projection, which projects the vector field to a mass conserving field. With this, we can begin
+    our entire pipeline.
+    <ol>
+      <li>Add smoke sources. This can be from a mouse, or a smoke source added in the beginning of the program. This also intializes the velocity field.</li>
+      <li>Diffuse the velocity field. this allows the velocity field to evolve over time.</li>
+      <li>Project the diffused velocity field to a mass conserving field.</li>
+      <li>Self-advect the velocity field, i.e use the velocity field to advect the velocity field.</li>
+      <li>Again, project the velocity field into a mass conserving field.</li>
+      <li>Diffuse the densities.</li>
+      <li>Advect the densities according to the velocity field.</li>
+      <li>Repeat.</li>
+    </ol>
+    <h3 align = "midddle">Extras</h3>
+    <p>
+      The introduction of velocity fields gives much more freedom to the physics of fluids, especially with forces. One of these is curling effects, which allows for rotational flows, commonly known as vorticity.
+      This can be done by using the gradient dot operator on each of our vectors in the vector field, and normalizing it to get a normalized vorticity field $\Psi$. Mathematically speaking, this is:
+      $$\Psi = \frac{\eta}{|\eta|}, \eta = \nabla |\omega|, \omega = \nabla \cdot u$$
+      We can then apply the restorative force, which is defined to be:
+      $$f_{vc} = \epsilon(\Psi \times \omega)\delta x$$
     </p>
     <div>
-      
+      <h2 align="middle">Decisions, Problems, Lessons</h2>
+      <p>
+        Our project varied in that most other implementations implemented fluids and smoke in 2 dimensions rather than 3-dimensions. This pushed us to used clothsim rather than using other infrastructures such as 
+        javascript, because of the speed of C++. We leveraged the pointmasses in the Clothsim project, and built a grid of pointmasses to represent the density of our smoke. Some of the problems we encountered were 
+        translating a lot of code from 2-D to 3-D and working in 3-D. Since most of the sources we found were 2-D implementations of fluid solvers, the algorithms were not direclty translated easily. Some things like 
+        bilinear interpolation, grid-indexing, and diffusion algorithms had to be moved to a 3-D context rather than a 2-D context. Furthermore, since we were implementing a 3-D fluid solver, the implementation of shaders
+        was not immediately obvious, which caused us to not be able to use shaders in our project. We believe the usage of shaders would make our simulator much faster, but since most of the references online use shaders in 
+        a 2-D context, we couldn't figure out in the allotted time how to use shaders in the 3-D context. We still pushed forward with C++ though, even if it was still slow. We tried to alleviate the speed of our simulator using
+        OpenMP to speed up our for loops, which did help. However, due to the serial nature of our code, we had to keep our smoke simulator size to be less than 50 units for a smooth experience. One of the biggest lessons we learned
+        was how to start working from a codebase. We as a group had no idea how the clothsim pipeline worked when using clothsim, so we had to take a large amount of time understanding how the pipeline worked before we could even 
+        start coding any type of smoke simulator. Another thing we learned was how to code physics based systems in a simplified matter. Rather than coding the exact mathematical formulas, we learned how to code physics equations in 
+        discrete settings intuitively, rather than copying equations line for line. 
+      </p>
     </div>
   </div>
 
-  <div>
-    <h2 align="middle">Reflection on Progress Relative to Plan</h2>
-    <p>Relative to our plan, we somewhat went backwards. Instead of doing the advect step, we found it was easiest to do the diffusion step first, since the advect step required having a velocity field. Regardless of our out of ordering scheduling, we are happy with our progress, as we have an infrastucture set up in clothsim, as well as finishing the diffusion step of the smoke simulation. However, we didn't write any of our code in OpenGL, and have only written code in C++ to hit the ground running. Originally, we stated that we were going to write our project in Python, and use libraries such as pyopenGL and pytorch. However, we found that rendering python using a grid based method (such as in pygame) can be difficult and slow. Thus, we opted with using clothsim as the base and doing everything in C++.</p>
-  </div>
-  <div>
-    <h2 align="middle">Next Steps</h2>
-    <p>Most of our code right now runs using for loops, using only CPU computations. To make it much faster, we plan to use GPU computations and migrate our work to OpenGL. After refactoring, we plan to add a 3 dimensional velocity field that will allow for more dynamic smoke simulations. The interactivity of the velocity field is yet to be determined (perhaps by mouse or by a parametric function across timesteps), but with the velocity field, we will be able to implement the next advect step in 3-dimensions. Next is the dynamic velocity field, allow velocity to evolve over time through self-advection or from different forces, which will allow for more realistic smoke simulations. After this, since Jos Stam's fluid solver is arbitrary, We plan to have different shaders to represent different fluild like simulations, such as fire.</p>
-  </div> 
-
+<!--PLACE RESULTS HERE!!!-->
+<div>
+  <h2 align = "middle">Results</h2>
+</div>
+<div>
+  <h2 align = "middle">References</h2> 
+  <h5 align = "middle"><a href="https://pages.cs.wisc.edu/~chaol/data/cs777/stam-stable_fluids.pdf" style="color:greenyellow">Stable Fluids, by Jos Stam</a></h5>
+  <h5 align = "middle"><a href="https://developer.nvidia.com/gpugems/gpugems/part-vi-beyond-triangles/chapter-38-fast-fluid-dynamics-simulation-gpu" style="color:greenyellow">GPU Gems Chapter 38: Fast Fluid Dynamics Simulation on the GPU, By Mark J. Harris</a></h5>
+  <h5 align = "middle"><a href="https://github.com/mharrys/fluids-2d" style="color:greenyellow">Fluids-2D, by Mattias Harrysson</a></h5>
+  <h5 align = "middle"><a href="https://cs184.eecs.berkeley.edu/sp24/docs/hw4" style="color:greenyellow">CS184 Project 4 - ClothSim</a></h5>
+  <h5 align = "middle"><a href="http://graphics.cs.cmu.edu/nsp/course/15-464/Fall09/papers/StamFluidforGames.pdf" style="color:greenyellow">Real-Time Fluid Dynamics for Games, by Jos Stam</a></h5>
+  <h5 align = "middle"><a href="https://rachelbhadra.github.io/smoke_simulator/index.html" style="color:greenyellow">2D Smoke Simulator, By Rachel Bhadara, Jonothan Ngan, and Kenneth Tsai</a></h5>
+</div>
+<div>
+  <h2 align = "middle">Contributions</h2>
+  <p>
+    <b>Michael Huang:</b> Implemented diffusion code and advection code. Made milestone website and final website.
+  </p>
+</div>
 </body>
 </html>
