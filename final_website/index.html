@@ -1,0 +1,165 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml" xml:lang="en" lang="en">
+<head>
+    <script type="text/javascript"
+    src="https://www.maths.nottingham.ac.uk/plp/pmadw/LaTeXMathML.js">
+    </script>
+  <style>
+    body {
+      background-color: #404040;
+      background-color: #36454F;
+      padding: 100px;
+      width: 1000px;
+      margin: auto;
+      text-align: left;
+      font-weight: 300;
+      font-family: 'Open Sans', sans-serif;
+      color: white;
+    }
+    h1, h2, h3, h4 {
+      font-family: 'Source Sans Pro', sans-serif;
+    }
+    kbd {
+      color: #121212;
+    }
+    blockquote {
+      color: #888;
+      border: 2px solid #333;
+      padding: 10px;
+      background-color: #ccc;
+    }
+
+    table.custom-tbl {
+      border: 1px solid;
+    }
+
+    table.custom-tbl th {
+      border: 1px solid;
+      background-color: rgb(99, 209, 209);
+    }
+
+    table.custom-tbl td {
+      border: 1px solid;
+      background-color: #f1e686a8;
+    }
+  </style>
+
+  <title>CS 184 3D Smoke Simulator</title>
+  <meta http-equiv="content-type" content="text/html; charset=utf-8" />
+  <!-- Not using below due to lacking bold fontfaces -->
+  <!-- <link href="https://fonts.googleapis.com/css?family=Open+Sans|Source+Sans+Pro|Source+Sans+Pro:400,700" rel="stylesheet"> -->
+  <link href="https://fonts.googleapis.com/css?family=Roboto+Mono|Roboto+Slab|Roboto:300,400,500,700" rel="stylesheet" />
+
+  <script>
+    MathJax = {
+      tex: {
+        inlineMath: [['$', '$'], ['\\(', '\\)']]
+      }
+    };
+  </script>
+  <script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js">
+  </script>  
+</head>
+
+<body>
+
+  <h1 align="middle">3-Dimensional Smoke Simulator</h1>
+  <h2 align="middle">Michael Huang, Geovanni Mojica, Kyle Wong, Ethan Tam</h2>
+
+  <br><br>
+
+  <div>
+    <h2 align="middle">Abstract</h2>
+    <p>
+      In this project, we've implemented a 3-dimensional interactive smoke simulator using the Eularian based method. Rather than using particle physics, we discretize smoke effects
+      by using a grid that holds the density of a fluid. To simulate physical effects, we use another grid to hold a velocity field, which is interactive. The entire project is based 
+      off the cloth simulator project, and uses pointmasses as the grid to render different smoke effects.
+</p> 
+  </div>
+  <div>
+    <h2 align="middle">Techinical Approach</h2>
+    <p>To implement a smoke simulator, we must understand the physics of fluid. 
+      The physics of fluid must follow the Navier-Stokes Equations, which model 
+      fluid flows in nature, for example smoke. These equations are:
+      $$\nabla \cdot u = 0$$
+      $$\frac{\partial u}{\partial t} = -(u \cdot \nabla)u - \frac{1}{\rho}\nabla p + \nu \nabla^2 u + f$$
+      The first equation simply states that mass is conserved, while the second states Newton's second law $F = ma$.
+      While these equations may look daunting at first, we used Jos Stam's simplified grid approach to implement a solver
+      for these fluids.
+    </p>
+    <div align="middle">
+      <table style="width:100%">
+        <tr align="center">
+          <td>
+            <img src="images/steps.png" align="middle" width="900vw" />
+            <figcaption>Basic Structure of density Solver.</figcaption>
+          </td>
+          <td>
+        </tr>
+      </table>
+    </div>
+    <p>
+      At each timestep, we apply these steps to our density. The grid based method allows for (relatively) fast computations
+      and is simpler to implement. For the 3-dimensional setting, our infrastructure consists of a 3 dimensional grid with lengths
+      $N_x, N_y, N_z$, which are adjustable by the user. It should be noted as one increases the size of the grid, the more computation that takes
+      place, as the runtime of each timestep is $O(N_xN_yN_z)$. To alleviate this, since much of the comptutation is iteration across each grid, we used
+      OpenMP parrarelism. In general though, our solver uses three main functions: diffusion, advection, and projection.
+      <div>
+        <h3 align = "middle">Diffusion</h3>
+        <p>
+        The intuition behind Diffusion is relatively simple. For a diffusion rate $d > 0$, density will spread across all neighbors of a grid cell. 
+        For the flow out of a grid cell, we assume equal output toward all neighbors. The total output for grid cell $x_{i,j,k}$ will thus be $(1 - d)\rho_{i, j,k}$,
+        and the output toward each neighboring cell will thus be $\frac{d}{6}\rho_{i, j,k}$ (6 neighboring cells for each cell). We can thus describe our diffusion relationship
+        across time to be:
+        $$\rho_{i, j,k}^{t + 1} = (1 - d)\rho_{i, j,k}^t + \frac{d}{6}(\rho_{i-1, j,k}^t + \rho_{i+1, j,k}^t + \rho_{i, j-1,k}^t + \rho_{i, j+1,k}^t + \rho_{i, j,k-1}^t + \rho_{i, j,k+1}^t)$$
+        To give the illusion that smoke flows upward, we can place more flow to be flowed in from the bottom cell:
+        $$\rho_{i, j,k}^{t + 1} = (1 - d)\rho_{i, j,k}^t + \frac{d}{6 + \alpha}(\rho_{i-1, j,k}^t + \rho_{i+1, j,k}^t + \rho_{i, j-1,k}^t + \rho_{i, j+1,k}^t + (1 + \alpha)\rho_{i, j,k-1}^t + \rho_{i, j,k+1}^t)$$
+        In general, for users to play around with diffusion flow, all flows can be adjustable as follows:
+        $$\rho_{i, j,k}^{t + 1} = (1 - d)\rho_{i, j,k}^t + \frac{d}{a_1 + a_2 + a_3 + a_4 + a_5 + a_6}(a_1\rho_{i-1, j,k}^t + a_2\rho_{i+1, j,k}^t + a_3\rho_{i, j-1,k}^t + a_4\rho_{i, j+1,k}^t + a_5\rho_{i, j,k-1}^t + a_6\rho_{i, j,k+1}^t)$$        
+        </p>
+      </div>
+      <h3 align = "middle">Advection</h3>
+      Advection allows us to transfer density through static velocity fields. The intuition is again simple. Consider a static velocity field (i.e a 3 dimensional grid) each containing velocity vectors $\vec{V} = [v_x, v_y, v_z]$. For a cell 
+      $x_{i,j,k}$, we consider all the density that would go to that cell in the current timestep:
+      <div align="middle">
+        <table style="width:100%">
+          <tr align="center">
+            <td>
+              <img src="images/advect.png" align="middle" width="450vw" />
+              <figcaption>Advection visualization. For a cell, we go backwards to get the diffuse material that would go to it.</figcaption>
+            </td>
+            <td>
+          </tr>
+        </table>
+      </div>
+      In other words, we first find the cell that would have density travel to $x_{i, j, k}$, and have its density travel there. Mathematically, 
+      we first find the cell that would travel to $x_{i, j, k}$:
+      $$\vec{p}_{src} = \vec{p}_{i, j, k} - \vec{V}dt$$
+      It should be noted though that $p_{src}$ is not restricted to grid positions though. Thus, the amount of diffusion traveled will be a trilinear interpolation of the 8 cells that neighbor $p_{src}$. Thus, our result is:
+      $$\rho_{i, j, k} = trerp(\vec{p}_{i, j, k} - \vec{V}dt)$$
+      For a static velocity field then, we simply diffuse our smoke, the have the resulting diffusion follow the velocity field.
+    </p>
+    <h3 align = "middle">Evolving Velocities and Projection</h3>
+    <p>
+      The velocity solver consists of the addition of forces (from a mouse), viscous diffusion, and self-advection. Self-advection can be interpretted as the diffusion and advection of the velocity field itself. However, the evolution
+      of the velocity field must conserve mass, as illustrated by the first equation of Navier-Stokes so the solver doesn't explode. To do this, we use the Hodge decomposition, which states that any velocity field is the sum of a mass 
+      conserving field and a gradient field. With this mass-conserving field, we can project the velocity field to be the mass-conserving field. However, to do this, we must solve for the gradient field. Once we solve for the gradient field,
+      we can subtract it from our original velocity field to get our wanted mass-conserved field
+    </p>
+    <div>
+      
+    </div>
+  </div>
+
+  <div>
+    <h2 align="middle">Reflection on Progress Relative to Plan</h2>
+    <p>Relative to our plan, we somewhat went backwards. Instead of doing the advect step, we found it was easiest to do the diffusion step first, since the advect step required having a velocity field. Regardless of our out of ordering scheduling, we are happy with our progress, as we have an infrastucture set up in clothsim, as well as finishing the diffusion step of the smoke simulation. However, we didn't write any of our code in OpenGL, and have only written code in C++ to hit the ground running. Originally, we stated that we were going to write our project in Python, and use libraries such as pyopenGL and pytorch. However, we found that rendering python using a grid based method (such as in pygame) can be difficult and slow. Thus, we opted with using clothsim as the base and doing everything in C++.</p>
+  </div>
+  <div>
+    <h2 align="middle">Next Steps</h2>
+    <p>Most of our code right now runs using for loops, using only CPU computations. To make it much faster, we plan to use GPU computations and migrate our work to OpenGL. After refactoring, we plan to add a 3 dimensional velocity field that will allow for more dynamic smoke simulations. The interactivity of the velocity field is yet to be determined (perhaps by mouse or by a parametric function across timesteps), but with the velocity field, we will be able to implement the next advect step in 3-dimensions. Next is the dynamic velocity field, allow velocity to evolve over time through self-advection or from different forces, which will allow for more realistic smoke simulations. After this, since Jos Stam's fluid solver is arbitrary, We plan to have different shaders to represent different fluild like simulations, such as fire.</p>
+  </div> 
+
+</body>
+</html>
